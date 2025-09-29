@@ -1,28 +1,27 @@
-import React, { useState } from 'react';
-import { Facebook } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
-import { FacebookApiService } from '../../services/facebookApi';
+import React, { useState } from "react";
+import { Facebook } from "lucide-react";
+import { supabase } from "../../services/supabaseClient"; // Importamos o cliente Supabase
 
 export const FacebookLogin: React.FC = () => {
   const [loading, setLoading] = useState(false);
-  const { login, setClients } = useAuth();
+  const [error, setError] = useState<string | null>(null);
 
   const handleLogin = async () => {
     setLoading(true);
+    setError(null);
     try {
-      const facebookApi = FacebookApiService.getInstance();
-      const authData = await facebookApi.authenticateUser();
-      const clients = facebookApi.convertPagesToClients(authData.pages);
-      
-      login(authData);
-      setClients(clients);
-      
-      console.log('Autenticação realizada com sucesso!');
-      console.log(`Usuário: ${authData.userId}`);
-      console.log(`Páginas encontradas: ${authData.pages.length}`);
-    } catch (error) {
-      console.error('Erro de autenticação:', error);
-      alert(`Erro ao fazer login com Facebook: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "facebook",
+      });
+
+      if (error) {
+        throw error;
+      }
+    } catch (err: unknown) {
+      // aqui usamos unknown para segurança
+      const e = err as { message?: string }; // definimos o tipo
+      console.error("Erro de autenticação com Supabase:", err);
+      setError(`Erro ao fazer login: ${e.message || "Ocorreu um problema."}`);
     } finally {
       setLoading(false);
     }
@@ -52,12 +51,15 @@ export const FacebookLogin: React.FC = () => {
             <span className="absolute left-0 inset-y-0 flex items-center pl-3">
               <Facebook className="h-5 w-5" />
             </span>
-            {loading ? 'Conectando...' : 'Conectar com Facebook'}
+            {loading ? "Conectando..." : "Conectar com Facebook"}
           </button>
 
+          {error && (
+            <p className="text-sm text-red-600 text-center mt-2">{error}</p>
+          )}
+
           <div className="text-xs text-gray-500 text-center">
-            <p>Conectando com suas páginas do Facebook e Instagram...</p>
-            <p className="mt-1">Certifique-se de que possui as permissões necessárias.</p>
+            <p>Você será redirecionado para o Facebook para autorizar.</p>
           </div>
         </div>
       </div>

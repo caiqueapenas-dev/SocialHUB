@@ -1,95 +1,48 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Post, PostStatus, GroupedPost } from "../types";
 import { useAuth } from "../contexts/AuthContext";
-import { FacebookApiService } from "../services/facebookApi";
+import { supabase } from "../services/supabaseClient";
 
 export const usePosts = () => {
-  const [posts, setPosts] = useState<Post[]>(() => {
-    try {
-      const localData = localStorage.getItem("socialHubPosts");
-      return localData ? JSON.parse(localData) : [];
-    } catch (error) {
-      console.error("Erro ao carregar posts do localStorage:", error);
-      return [];
-    }
-  });
+  const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
-  const { selectedClients, facebookAuth } = useAuth();
+  // Corrigido: Não precisamos mais do facebookAuth, apenas dos clientes selecionados.
+  const { selectedClients } = useAuth();
 
-  const POSTS_PER_PAGE = 10;
-
-  // Carregar posts reais quando clientes são selecionados
-  useEffect(() => {
-    const loadRealPosts = async () => {
-      if (!facebookAuth || selectedClients.length === 0) {
-        setPosts([]);
-        setCurrentPage(1);
-        setHasMore(true);
-        return;
-      }
-
-      setLoading(true);
-      try {
-        const facebookApi = FacebookApiService.getInstance();
-        const allPosts: Post[] = [];
-
-        for (const client of selectedClients) {
-          const page = facebookAuth.pages.find(
-            (p) => p.id === client.facebookPageId
-          );
-          if (page) {
-            const clientPosts = await facebookApi.getAllPostsForClient(
-              client,
-              page.access_token
-            );
-            allPosts.push(...clientPosts);
-          }
-        }
-
-        setPosts(allPosts);
-        setCurrentPage(1);
-        setHasMore(allPosts.length > POSTS_PER_PAGE);
-      } catch (error) {
-        console.error("Erro ao carregar posts:", error);
-        setPosts([]);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadRealPosts();
-  }, [selectedClients, facebookAuth]);
-
-  const loadMorePosts = async () => {
-    if (!hasMore || loadingMore) return;
-
-    setLoadingMore(true);
-    try {
-      // Simular carregamento de mais posts
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      setCurrentPage((prev) => prev + 1);
-
-      const totalLoaded = (currentPage + 1) * POSTS_PER_PAGE;
-      setHasMore(totalLoaded < posts.length);
-    } catch (error) {
-      console.error("Erro ao carregar mais posts:", error);
-    } finally {
-      setLoadingMore(false);
+  const fetchPosts = useCallback(async () => {
+    if (selectedClients.length === 0) {
+      setPosts([]);
+      setLoading(false);
+      return;
     }
-  };
 
-  const filteredPosts = posts.filter(
-    (post) =>
-      selectedClients.length === 0 ||
-      selectedClients.some((client) => client.id === post.clientId)
-  );
+    setLoading(true);
+    try {
+      const clientIds = selectedClients.map((client) => client.id);
 
-  const paginatedPosts = filteredPosts.slice(0, currentPage * POSTS_PER_PAGE);
+      const { data, error } = await supabase
+        .from("posts")
+        .select("*")
+        .in("clientId", clientIds)
+        .order("scheduledDate", { ascending: false });
 
-  // Agrupar posts por conteúdo similar (mesmo cliente, data e conteúdo)
+      if (error) {
+        throw error;
+      }
+
+      setPosts((data as Post[]) || []);
+    } catch (error) {
+      console.error("Erro ao buscar posts do Supabase:", error);
+      setPosts([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedClients]);
+
+  useEffect(() => {
+    fetchPosts();
+  }, [fetchPosts]);
+
   const groupPosts = (postsToGroup: Post[]): GroupedPost[] => {
     const grouped = new Map<string, GroupedPost>();
 
@@ -103,9 +56,6 @@ export const usePosts = () => {
         const existing = grouped.get(groupKey)!;
         existing.channels = [
           ...new Set([...existing.channels, ...post.channels]),
-        ];
-        existing.publishedChannels = [
-          ...new Set([...existing.publishedChannels, ...post.channels]),
         ];
         existing.posts.push(post);
       } else {
@@ -138,112 +88,94 @@ export const usePosts = () => {
   };
 
   const getPostsByStatus = (status: PostStatus) => {
-    return groupPosts(paginatedPosts.filter((post) => post.status === status));
-  };
-
-  const getAllGroupedPosts = () => {
-    return groupPosts(filteredPosts);
+    return groupPosts(posts.filter((p) => p.status === status));
   };
 
   const getPostById = (id: string) => {
-    return posts.find((post) => post.id === id);
+    return posts.find((post) => post.id.toString() === id);
   };
 
-  const updatePostStatus = (postId: string, status: PostStatus) => {
+  const addPost = async (
+    postData: Omit<Post, "id" | "createdAt">
+  ): Promise<Post> => {
+    const newPostData = {
+      ...postData,
+    };
+
+    const { data, error } = await supabase
+      .from("posts")
+      .insert([newPostData])
+      .select();
+
+    if (error) {
+      console.error("Erro ao adicionar post:", error);
+      throw error;
+    }
+
+    const createdPost = data[0] as Post;
+    setPosts((prev) => [createdPost, ...prev]);
+    return createdPost;
+  };
+
+  const updatePostStatus = async (postId: string, status: PostStatus) => {
+    const { data, error } = await supabase
+      .from("posts")
+      .update({ status: status })
+      .eq("id", postId)
+      .select();
+
+    if (error) {
+      console.error("Erro ao atualizar status:", error);
+      throw error;
+    }
+
+    // Corrigido: Adicionamos o tipo (p: Post) para ajudar o TypeScript.
     setPosts((prev) =>
-      prev.map((post) => (post.id === postId ? { ...post, status } : post))
+      prev.map((p: Post) =>
+        p.id.toString() === postId ? (data[0] as Post) : p
+      )
     );
   };
 
-  const updatePostContent = (postId: string, content: string) => {
-    setPosts((prevPosts) => {
-      const newPosts = prevPosts.map((post) =>
-        post.id === postId ? { ...post, content } : post
-      );
-      localStorage.setItem("socialHubPosts", JSON.stringify(newPosts));
-      return newPosts;
-    });
-  };
+  const updatePostContent = async (postId: string, content: string) => {
+    const { data, error } = await supabase
+      .from("posts")
+      .update({ content: content })
+      .eq("id", postId)
+      .select();
 
-  const addPost = (post: Omit<Post, "id" | "createdAt">) => {
-    const newPost: Post = {
-      ...post,
-      id: Date.now().toString(),
-      createdAt: new Date().toISOString(),
-    };
-    setPosts((prevPosts) => {
-      const newPosts = [...prevPosts, newPost];
-      localStorage.setItem("socialHubPosts", JSON.stringify(newPosts));
-      return newPosts;
-    });
-    return newPost;
+    if (error) {
+      console.error("Erro ao atualizar conteúdo:", error);
+      throw error;
+    }
+
+    // Corrigido: Adicionamos o tipo (p: Post) para ajudar o TypeScript.
+    setPosts((prev) =>
+      prev.map((p: Post) =>
+        p.id.toString() === postId ? (data[0] as Post) : p
+      )
+    );
   };
 
   const publishPost = async (post: Post) => {
-    if (!facebookAuth) {
-      throw new Error("Não autenticado");
-    }
-
-    const facebookApi = FacebookApiService.getInstance();
-    const client = selectedClients.find((c) => c.id === post.clientId);
-    const page = facebookAuth.pages.find(
-      (p) => p.id === client?.facebookPageId
-    );
-
-    if (!client || !page) {
-      throw new Error("Cliente ou página não encontrada");
-    }
-
-    try {
-      const results = [];
-
-      if (post.channels.includes("facebook")) {
-        const fbResult = await facebookApi.publishFacebookPost(
-          client.facebookPageId,
-          page.access_token,
-          {
-            message: post.content,
-            published: true,
-          }
-        );
-        results.push({ platform: "facebook", result: fbResult });
-      }
-
-      if (post.channels.includes("instagram") && client.instagramAccountId) {
-        const igResult = await facebookApi.publishInstagramPost(
-          client.instagramAccountId,
-          page.access_token,
-          {
-            caption: post.content,
-            image_url: post.media[0]?.url,
-            media_type: "IMAGE",
-          }
-        );
-        results.push({ platform: "instagram", result: igResult });
-      }
-
-      updatePostStatus(post.id, "published");
-
-      return results;
-    } catch (error) {
-      console.error("Erro ao publicar post:", error);
-      throw error;
-    }
+    console.log("Simulando publicação do post:", post.id);
+    await updatePostStatus(post.id.toString(), "published");
+    return { success: true, platform: "mock" };
   };
 
   return {
-    posts: paginatedPosts,
-    allPosts: filteredPosts,
-    groupedPosts: getAllGroupedPosts(),
+    posts: posts,
+    // Removido allPosts para simplificar, groupedPosts é mais útil
+    groupedPosts: groupPosts(posts),
     loading,
-    loadingMore,
-    hasMore: hasMore && currentPage * POSTS_PER_PAGE < filteredPosts.length,
-    loadMorePosts,
     getPostsByStatus,
     getPostById,
     updatePostStatus,
     updatePostContent,
     addPost,
     publishPost,
+    loadingMore: false,
+    hasMore: false,
+    loadMorePosts: () => {},
   };
 };
