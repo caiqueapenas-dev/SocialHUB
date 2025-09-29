@@ -1,17 +1,9 @@
 import React, { useState, useRef } from "react";
-import {
-  X,
-  Upload,
-  Facebook,
-  Instagram,
-  Calendar,
-  Link,
-  Image as ImageIcon,
-} from "lucide-react";
+import { X, Upload, Facebook, Instagram, Calendar, Link } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { usePosts } from "../../hooks/usePosts";
 import { Channel, PostFormat, MediaFile } from "../../types";
-import { FacebookApiService } from "../../services/facebookApi";
+import { supabase } from "../../services/supabaseClient"; // Importamos o Supabase
 
 interface CreatePostModalProps {
   isOpen: boolean;
@@ -22,8 +14,8 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
   isOpen,
   onClose,
 }) => {
-  const { selectedClients } = useAuth();
-  const { addPost, publishPost } = usePosts();
+  const { selectedClients, user } = useAuth(); // Pegamos o usuário para o path do arquivo
+  const { addPost } = usePosts(); // Removido publishPost, pois será feito no backend
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState({
@@ -32,13 +24,11 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
     format: "single" as PostFormat,
     channels: [] as Channel[],
     scheduledDate: "",
-    publishNow: false,
   });
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
-  const [mediaUrl, setMediaUrl] = useState("");
-  const [showConfirmation, setShowConfirmation] = useState(false);
-  const [approvalLink, setApprovalLink] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Definir data padrão como agora
   React.useEffect(() => {
@@ -69,61 +59,70 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleFiles(Array.from(e.dataTransfer.files));
+      handleFileUpload(Array.from(e.dataTransfer.files));
     }
   };
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      handleFiles(Array.from(e.target.files));
+      handleFileUpload(Array.from(e.target.files));
     }
   };
 
-  const handleFiles = (files: File[]) => {
-    const newMediaFiles: MediaFile[] = files.map((file) => ({
-      id: Date.now().toString() + Math.random(),
-      type: file.type.startsWith("video/") ? "video" : "image",
-      url: URL.createObjectURL(file),
-      file,
-    }));
-    setMediaUrl("");
-    setMediaFiles((prev) => [...prev, ...newMediaFiles]);
-  };
+  const handleFileUpload = async (files: File[]) => {
+    setError(null);
+    if (files.length === 0 || !user) return;
+    setIsUploading(true);
 
-  const addMediaFromUrl = () => {
-    if (mediaUrl.trim() === "") return;
+    try {
+      const uploadPromises = files.map(async (file) => {
+        const fileExt = file.name.split(".").pop();
+        const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+        const filePath = `${fileName}`;
 
-    const newMediaFile: MediaFile = {
-      id: Date.now().toString() + Math.random(),
-      type: "image", // Assumindo imagem por padrão
-      url: mediaUrl,
-    };
+        const { error: uploadError } = await supabase.storage
+          .from("media")
+          .upload(filePath, file);
 
-    setMediaFiles((prev) => [...prev, newMediaFile]);
-    setMediaUrl("");
+        if (uploadError) {
+          throw uploadError;
+        }
+
+        const { data } = supabase.storage.from("media").getPublicUrl(filePath);
+
+        return {
+          id: data.publicUrl,
+          type: file.type.startsWith("video/") ? "video" : "image",
+          url: data.publicUrl,
+        } as MediaFile;
+      });
+
+      const uploadedFiles = await Promise.all(uploadPromises);
+      setMediaFiles((prev) => [...prev, ...uploadedFiles]);
+    } catch (error: any) {
+      console.error("Erro no upload:", error);
+      setError("Falha no upload do arquivo. Tente novamente.");
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const removeMedia = (mediaId: string) => {
     setMediaFiles((prev) => prev.filter((m) => m.id !== mediaId));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (formData.publishNow) {
-      setShowConfirmation(true);
-    } else {
-      schedulePost();
+    if (formData.clientIds.length === 0 || mediaFiles.length === 0) {
+      setError("Selecione pelo menos um cliente e uma mídia.");
+      return;
     }
-  };
+    setError(null);
 
-  const schedulePost = () => {
-    if (formData.clientIds.length === 0) return;
-
-    // Criar posts para cada cliente selecionado
-    const createdPosts = formData.clientIds
-      .map((clientId) => {
+    try {
+      // Criar posts para cada cliente selecionado
+      const postPromises = formData.clientIds.map((clientId) => {
         const selectedClient = selectedClients.find((c) => c.id === clientId);
         if (!selectedClient) return null;
 
@@ -131,88 +130,38 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
           clientId,
           clientName: selectedClient.name,
           content: formData.content,
-          media:
-            mediaFiles.length > 0
-              ? mediaFiles
-              : [
-                  {
-                    id: Date.now().toString(),
-                    type: "image" as const,
-                    url: "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500",
-                  },
-                ],
+          media: mediaFiles,
           format: formData.format,
           channels: formData.channels,
           scheduledDate: formData.scheduledDate || new Date().toISOString(),
           status: "pending_approval",
-          approvalLink: `${window.location.origin}/approve/${Date.now()}`,
+          approvalLink: `${
+            window.location.origin
+          }/approve/${Date.now()}-${Math.random()}`,
         });
-      })
-      .filter(Boolean);
+      });
 
-    if (createdPosts.length > 0) {
-      setApprovalLink(createdPosts[0]!.approvalLink!);
+      await Promise.all(postPromises.filter(Boolean));
+
+      resetFormAndClose();
+    } catch (error) {
+      console.error("Erro ao criar post:", error);
+      setError("Não foi possível criar o post. Tente novamente.");
     }
-
-    setShowConfirmation(false);
-    resetForm();
   };
 
-  const publishNow = () => {
-    if (formData.clientIds.length === 0) return;
-
-    // Publicar para cada cliente selecionado
-    const publishPromises = formData.clientIds.map(async (clientId) => {
-      const selectedClient = selectedClients.find((c) => c.id === clientId);
-      if (!selectedClient) return;
-
-      const newPost = addPost({
-        clientId,
-        clientName: selectedClient.name,
-        content: formData.content,
-        media:
-          mediaFiles.length > 0
-            ? mediaFiles
-            : [
-                {
-                  id: Date.now().toString(),
-                  type: "image" as const,
-                  url: "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500",
-                },
-              ],
-        format: formData.format,
-        channels: formData.channels,
-        scheduledDate: new Date().toISOString(),
-        status: "approved",
-      });
-
-      return publishPost(newPost);
-    });
-
-    Promise.all(publishPromises)
-      .then(() => {
-        alert("Posts publicados com sucesso!");
-        setShowConfirmation(false);
-        onClose();
-        resetForm();
-      })
-      .catch((error) => {
-        console.error("Erro ao publicar:", error);
-        alert(`Erro ao publicar: ${error.message}`);
-        setShowConfirmation(false);
-      });
-  };
-
-  const resetForm = () => {
+  const resetFormAndClose = () => {
     setFormData({
       clientIds: [],
       content: "",
       format: "single",
       channels: [],
       scheduledDate: "",
-      publishNow: false,
     });
     setMediaFiles([]);
+    setError(null);
+    setIsUploading(false);
+    onClose();
   };
 
   const toggleChannel = (channel: Channel) => {
@@ -233,82 +182,6 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
     }));
   };
 
-  if (showConfirmation) {
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">
-            Confirmar Publicação
-          </h3>
-          <p className="text-sm text-gray-600 mb-6">
-            Tem certeza que deseja publicar este post agora? Esta ação não pode
-            ser desfeita.
-          </p>
-          <div className="flex space-x-4">
-            <button
-              onClick={() => setShowConfirmation(false)}
-              className="flex-1 px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={publishNow}
-              className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Publicar Agora
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  if (approvalLink) {
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-gray-900">
-              Post Agendado!
-            </h3>
-            <button
-              onClick={() => {
-                setApprovalLink("");
-                onClose();
-              }}
-              className="text-gray-400 hover:text-gray-600 transition-colors"
-            >
-              <X size={20} />
-            </button>
-          </div>
-          <div className="space-y-4">
-            <p className="text-sm text-gray-600">
-              Post criado com sucesso! Envie este link para aprovação do
-              cliente:
-            </p>
-            <div className="flex items-center space-x-2">
-              <input
-                type="text"
-                value={approvalLink}
-                readOnly
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm bg-gray-50"
-              />
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(approvalLink);
-                  alert("Link copiado!");
-                }}
-                className="px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-              >
-                <Link size={16} />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -317,7 +190,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
             Criar Novo Post
           </h2>
           <button
-            onClick={onClose}
+            onClick={resetFormAndClose}
             className="text-gray-400 hover:text-gray-600 transition-colors"
           >
             <X size={24} />
@@ -360,23 +233,6 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Mídia
             </label>
-            <div className="flex items-center space-x-2 mb-4">
-              <input
-                type="text"
-                placeholder="Ou cole a URL da imagem aqui"
-                value={mediaUrl}
-                onChange={(e) => setMediaUrl(e.target.value)}
-                className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm"
-              />
-              <button
-                type="button"
-                onClick={addMediaFromUrl}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
-              >
-                Adicionar
-              </button>
-            </div>
-
             <div
               className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer ${
                 dragActive
@@ -390,10 +246,20 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
               onClick={() => fileInputRef.current?.click()}
             >
               <Upload className="mx-auto h-12 w-12 text-gray-400" />
-              <p className="mt-2 text-sm text-gray-600">
-                Clique para fazer upload ou arraste arquivos aqui
-              </p>
-              <p className="text-xs text-gray-500">PNG, JPG, MP4 até 10MB</p>
+              {isUploading ? (
+                <p className="mt-2 text-sm text-blue-600">
+                  Enviando arquivos...
+                </p>
+              ) : (
+                <>
+                  <p className="mt-2 text-sm text-gray-600">
+                    Clique para fazer upload ou arraste arquivos aqui
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    PNG, JPG, MP4 até 50MB
+                  </p>
+                </>
+              )}
             </div>
             <input
               ref={fileInputRef}
@@ -402,8 +268,8 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
               accept="image/*,video/*"
               onChange={handleFileInput}
               className="hidden"
+              disabled={isUploading}
             />
-
             {mediaFiles.length > 0 && (
               <div className="mt-4 grid grid-cols-3 gap-4">
                 {mediaFiles.map((media) => (
@@ -411,7 +277,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
                     <img
                       src={media.url}
                       alt="Preview"
-                      className="w-full h-full object-contain rounded-lg"
+                      className="w-full h-24 object-cover rounded-lg"
                     />
                     <button
                       type="button"
@@ -463,7 +329,6 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
                 <option value="reels">Reels</option>
               </select>
             </div>
-
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Onde Publicar
@@ -494,51 +359,35 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="block text-sm font-medium text-gray-700">
-                Agendamento
-              </label>
-              <label className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  checked={formData.publishNow}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      publishNow: e.target.checked,
-                    }))
-                  }
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                <span className="text-sm text-gray-700">Publicar agora</span>
-              </label>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Agendamento
+            </label>
+            <div className="relative">
+              <Calendar
+                className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+                size={16}
+              />
+              <input
+                type="datetime-local"
+                value={formData.scheduledDate}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    scheduledDate: e.target.value,
+                  }))
+                }
+                required
+                className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              />
             </div>
-            {!formData.publishNow && (
-              <div className="relative">
-                <Calendar
-                  className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
-                  size={16}
-                />
-                <input
-                  type="datetime-local"
-                  value={formData.scheduledDate}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      scheduledDate: e.target.value,
-                    }))
-                  }
-                  required={!formData.publishNow}
-                  className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-            )}
           </div>
+
+          {error && <p className="text-sm text-red-600">{error}</p>}
 
           <div className="flex space-x-4 pt-4">
             <button
               type="button"
-              onClick={onClose}
+              onClick={resetFormAndClose}
               className="flex-1 px-4 py-2 text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
             >
               Cancelar
@@ -546,15 +395,15 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
             <button
               type="submit"
               disabled={
+                isUploading ||
                 formData.clientIds.length === 0 ||
                 !formData.content ||
-                formData.channels.length === 0
+                formData.channels.length === 0 ||
+                mediaFiles.length === 0
               }
               className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {formData.publishNow
-                ? "Publicar Agora"
-                : "Criar e Enviar para Aprovação"}
+              {isUploading ? "Enviando..." : "Criar e Enviar para Aprovação"}
             </button>
           </div>
         </form>

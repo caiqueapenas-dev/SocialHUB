@@ -12,16 +12,20 @@ export const FacebookLogin: React.FC = () => {
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "facebook",
+        options: {
+          scopes:
+            "pages_show_list,pages_manage_posts,pages_read_engagement,instagram_basic,instagram_content_publish",
+        },
       });
 
       if (error) {
         throw error;
       }
-    } catch (err: unknown) {
-      // aqui usamos unknown para segurança
-      const e = err as { message?: string }; // definimos o tipo
-      console.error("Erro de autenticação com Supabase:", err);
-      setError(`Erro ao fazer login: ${e.message || "Ocorreu um problema."}`);
+    } catch (error: any) {
+      console.error("Erro de autenticação com Supabase:", error);
+      setError(
+        `Erro ao fazer login: ${error.message || "Ocorreu um problema."}`
+      );
     } finally {
       setLoading(false);
     }
