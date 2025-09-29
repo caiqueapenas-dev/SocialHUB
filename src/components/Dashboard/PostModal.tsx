@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { X, Facebook, Instagram, Calendar, CreditCard as Edit2, Copy } from 'lucide-react';
-import { Post } from '../../types';
+import { GroupedPost } from '../../types';
 
 interface PostModalProps {
-  post: Post | null;
+  post: GroupedPost | null;
   onClose: () => void;
 }
 
@@ -43,7 +43,26 @@ export const PostModal: React.FC<PostModalProps> = ({ post, onClose }) => {
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">Detalhes do Post</h2>
+          <div className="flex items-center space-x-3">
+            {post.avatar && (
+              <img
+                src={post.avatar}
+                alt={post.displayName || post.clientName}
+                className="w-8 h-8 rounded-full"
+              />
+            )}
+            <div>
+              <h2 className="text-xl font-semibold text-gray-900">
+                {post.displayName || post.clientName}
+              </h2>
+              <span 
+                className="inline-block px-2 py-1 rounded-full text-xs font-medium text-white"
+                style={{ backgroundColor: post.color || '#6B7280' }}
+              >
+                {post.displayName || post.clientName}
+              </span>
+            </div>
+          </div>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -105,7 +124,7 @@ export const PostModal: React.FC<PostModalProps> = ({ post, onClose }) => {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-gray-600">Cliente:</span>
-                    <span className="text-sm text-gray-900">{post.clientName}</span>
+                    <span className="text-sm text-gray-900">{post.displayName || post.clientName}</span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-gray-600">Status:</span>
@@ -118,12 +137,14 @@ export const PostModal: React.FC<PostModalProps> = ({ post, onClose }) => {
                   <div className="flex items-center justify-between">
                     <span className="text-sm font-medium text-gray-600">Canais:</span>
                     <div className="flex space-x-2">
-                      {post.channels.includes('facebook') && (
-                        <Facebook size={16} className="text-blue-600" />
-                      )}
-                      {post.channels.includes('instagram') && (
-                        <Instagram size={16} className="text-pink-600" />
-                      )}
+                      <Facebook 
+                        size={16} 
+                        className={post.publishedChannels.includes('facebook') ? 'text-blue-600' : 'text-gray-300'} 
+                      />
+                      <Instagram 
+                        size={16} 
+                        className={post.publishedChannels.includes('instagram') ? 'text-pink-600' : 'text-gray-300'} 
+                      />
                     </div>
                   </div>
                   <div className="flex items-center justify-between">

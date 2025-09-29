@@ -71,7 +71,7 @@ export class FacebookApiService {
   async getPagePosts(
     pageId: string,
     pageToken: string,
-    limit: number = 25
+    limit: number = 50
   ): Promise<any[]> {
     try {
       const response = await fetch(
@@ -94,7 +94,7 @@ export class FacebookApiService {
   async getInstagramPosts(
     instagramAccountId: string,
     pageToken: string,
-    limit: number = 25
+    limit: number = 50
   ): Promise<any[]> {
     try {
       const response = await fetch(
@@ -268,12 +268,13 @@ export class FacebookApiService {
       // Buscar posts do Facebook
       const facebookPosts = await this.getPagePosts(
         client.facebookPageId,
-        pageToken
+        pageToken,
+        100 // Aumentar limite para pegar mais posts
       );
 
       for (const fbPost of facebookPosts) {
         const post: Post = {
-          id: fbPost.id,
+          id: `fb_${fbPost.id}`,
           clientId: client.id,
           clientName: client.name,
           content: fbPost.message || "",
@@ -285,6 +286,8 @@ export class FacebookApiService {
             : fbPost.created_time,
           status: fbPost.is_published ? "published" : "scheduled",
           createdAt: fbPost.created_time,
+          facebookPostId: fbPost.id,
+          combinedId: this.generateCombinedId(fbPost.message, fbPost.created_time)
         };
         posts.push(post);
       }
@@ -293,12 +296,13 @@ export class FacebookApiService {
       if (client.instagramAccountId) {
         const instagramPosts = await this.getInstagramPosts(
           client.instagramAccountId,
-          pageToken
+          pageToken,
+          100 // Aumentar limite para pegar mais posts
         );
 
         for (const igPost of instagramPosts) {
           const post: Post = {
-            id: igPost.id,
+            id: `ig_${igPost.id}`,
             clientId: client.id,
             clientName: client.name,
             content: igPost.caption || "",
@@ -308,6 +312,8 @@ export class FacebookApiService {
             scheduledDate: igPost.timestamp,
             status: "published",
             createdAt: igPost.timestamp,
+            instagramPostId: igPost.id,
+            combinedId: this.generateCombinedId(igPost.caption, igPost.timestamp)
           };
           posts.push(post);
         }
@@ -324,9 +330,21 @@ export class FacebookApiService {
     }
   }
 
+  private generateCombinedId(content: string, timestamp: string): string {
+    // Gerar ID combinado baseado no conteúdo e timestamp para agrupar posts similares
+    const contentHash = content ? content.substring(0, 50).replace(/\s+/g, '') : '';
+    const dateHash = new Date(timestamp).toDateString();
+    return `${contentHash}_${dateHash}`;
+  }
+
   private extractMediaFromFacebookPost(fbPost: any): any[] {
     if (!fbPost.attachments?.data?.[0]) {
-      return [];
+      // Se não há mídia, usar uma imagem padrão
+      return [{
+        id: fbPost.id,
+        type: "image",
+        url: "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500"
+      }];
     }
 
     const attachment = fbPost.attachments.data[0];
@@ -336,14 +354,14 @@ export class FacebookApiService {
       media.push({
         id: attachment.target?.id || fbPost.id,
         type: "image",
-        url: attachment.media?.image?.src || "",
+        url: attachment.media?.image?.src || "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500",
       });
     } else if (attachment.type === "video_inline") {
       media.push({
         id: attachment.target?.id || fbPost.id,
         type: "video",
         url: attachment.media?.source || "",
-        thumbnail: attachment.media?.image?.src,
+        thumbnail: attachment.media?.image?.src || "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500",
       });
     } else if (attachment.subattachments?.data) {
       // Carrossel
@@ -351,13 +369,17 @@ export class FacebookApiService {
         media.push({
           id: sub.target?.id || `${fbPost.id}_${media.length}`,
           type: sub.type === "photo" ? "image" : "video",
-          url: sub.media?.image?.src || sub.media?.source || "",
-          thumbnail: sub.media?.image?.src,
+          url: sub.media?.image?.src || sub.media?.source || "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500",
+          thumbnail: sub.media?.image?.src || "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500",
         });
       }
     }
 
-    return media;
+    return media.length > 0 ? media : [{
+      id: fbPost.id,
+      type: "image",
+      url: "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500"
+    }];
   }
 
   private extractMediaFromInstagramPost(igPost: any): any[] {
@@ -365,8 +387,8 @@ export class FacebookApiService {
       {
         id: igPost.id,
         type: igPost.media_type === "VIDEO" ? "video" : "image",
-        url: igPost.media_url,
-        thumbnail: igPost.thumbnail_url || igPost.media_url,
+        url: igPost.media_url || "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500",
+        thumbnail: igPost.thumbnail_url || igPost.media_url || "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500",
       },
     ];
   }

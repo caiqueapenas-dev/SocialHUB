@@ -1,13 +1,16 @@
 import React from 'react';
-import { Calendar, Eye, Facebook, Instagram, MessageCircle, Clock } from 'lucide-react';
-import { Post, PostStatus } from '../../types';
+import { Calendar, Eye, Facebook, Instagram, MessageCircle, Clock, MoreHorizontal } from 'lucide-react';
+import { GroupedPost, PostStatus } from '../../types';
 import { formatDistanceToNow } from '../../utils/dateUtils';
 
 interface PostGridProps {
-  posts: Post[];
-  onPostClick: (post: Post) => void;
+  posts: GroupedPost[];
+  onPostClick: (post: GroupedPost) => void;
   title: string;
   emptyMessage?: string;
+  showLoadMore?: boolean;
+  onLoadMore?: () => void;
+  loadingMore?: boolean;
 }
 
 const statusColors: Record<PostStatus, string> = {
@@ -35,7 +38,15 @@ const formatLabels: Record<string, string> = {
   reels: 'Reels'
 };
 
-export const PostGrid: React.FC<PostGridProps> = ({ posts, onPostClick, title, emptyMessage }) => {
+export const PostGrid: React.FC<PostGridProps> = ({ 
+  posts, 
+  onPostClick, 
+  title, 
+  emptyMessage,
+  showLoadMore,
+  onLoadMore,
+  loadingMore
+}) => {
   if (posts.length === 0) {
     return (
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center">
@@ -76,15 +87,38 @@ export const PostGrid: React.FC<PostGridProps> = ({ posts, onPostClick, title, e
 
             <div className="p-4">
               <div className="flex items-center justify-between mb-2">
-                <h3 className="font-medium text-gray-900 truncate">{post.clientName}</h3>
-                <div className="flex space-x-1">
-                  {post.channels.includes('facebook') && (
-                    <Facebook size={16} className="text-blue-600" />
+                <div className="flex items-center space-x-2">
+                  {post.avatar && (
+                    <img
+                      src={post.avatar}
+                      alt={post.displayName || post.clientName}
+                      className="w-6 h-6 rounded-full"
+                    />
                   )}
-                  {post.channels.includes('instagram') && (
-                    <Instagram size={16} className="text-pink-600" />
-                  )}
+                  <h3 className="font-medium text-gray-900 truncate">
+                    {post.displayName || post.clientName}
+                  </h3>
                 </div>
+                <div className="flex space-x-1">
+                  <Facebook 
+                    size={16} 
+                    className={post.publishedChannels.includes('facebook') ? 'text-blue-600' : 'text-gray-300'} 
+                  />
+                  <Instagram 
+                    size={16} 
+                    className={post.publishedChannels.includes('instagram') ? 'text-pink-600' : 'text-gray-300'} 
+                  />
+                </div>
+              </div>
+
+              {/* Tag colorida do cliente */}
+              <div className="mb-2">
+                <span 
+                  className="inline-block px-2 py-1 rounded-full text-xs font-medium text-white"
+                  style={{ backgroundColor: post.color || '#6B7280' }}
+                >
+                  {post.displayName || post.clientName}
+                </span>
               </div>
 
               <p className="text-sm text-gray-600 mb-3 line-clamp-2">
@@ -105,6 +139,25 @@ export const PostGrid: React.FC<PostGridProps> = ({ posts, onPostClick, title, e
           </div>
         ))}
       </div>
+
+      {showLoadMore && (
+        <div className="flex justify-center mt-6">
+          <button
+            onClick={onLoadMore}
+            disabled={loadingMore}
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+          >
+            {loadingMore ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                <span>Carregando...</span>
+              </>
+            ) : (
+              <span>Ver mais</span>
+            )}
+          </button>
+        </div>
+      )}
     </div>
   );
 };

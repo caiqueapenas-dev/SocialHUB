@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
-import { X, Upload, Facebook, Instagram, Calendar, Link } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { X, Upload, Facebook, Instagram, Calendar, Link, Image as ImageIcon } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePosts } from '../../hooks/usePosts';
-import { Channel, PostFormat } from '../../types';
+import { Channel, PostFormat, MediaFile } from '../../types';
 import { FacebookApiService } from '../../services/facebookApi';
 
 interface CreatePostModalProps {
@@ -13,18 +13,74 @@ interface CreatePostModalProps {
 export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClose }) => {
   const { selectedClients } = useAuth();
   const { addPost, publishPost } = usePosts();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
   const [formData, setFormData] = useState({
-    clientId: '',
+    clientIds: [] as string[],
     content: '',
     format: 'single' as PostFormat,
     channels: [] as Channel[],
     scheduledDate: '',
     publishNow: false
   });
+  const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [approvalLink, setApprovalLink] = useState('');
+  const [dragActive, setDragActive] = useState(false);
+
+  // Definir data padrão como agora
+  React.useEffect(() => {
+    if (isOpen) {
+      const now = new Date();
+      const localDateTime = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+        .toISOString()
+        .slice(0, 16);
+      setFormData(prev => ({ ...prev, scheduledDate: localDateTime }));
+    }
+  }, [isOpen]);
 
   if (!isOpen) return null;
+
+  const handleDrag = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true);
+    } else if (e.type === "dragleave") {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+    
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      handleFiles(Array.from(e.dataTransfer.files));
+    }
+  };
+
+  const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      handleFiles(Array.from(e.target.files));
+    }
+  };
+
+  const handleFiles = (files: File[]) => {
+    const newMediaFiles: MediaFile[] = files.map(file => ({
+      id: Date.now().toString() + Math.random(),
+      type: file.type.startsWith('video/') ? 'video' : 'image',
+      url: URL.createObjectURL(file),
+      file
+    }));
+    
+    setMediaFiles(prev => [...prev, ...newMediaFiles]);
+  };
+
+  const removeMedia = (mediaId: string) => {
+    setMediaFiles(prev => prev.filter(m => m.id !== mediaId));
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,57 +92,71 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
   };
 
   const schedulePost = () => {
-    const selectedClient = selectedClients.find(c => c.id === formData.clientId);
-    if (!selectedClient) return;
+    if (formData.clientIds.length === 0) return;
 
-    const newPost = addPost({
-      clientId: formData.clientId,
-      clientName: selectedClient.name,
-      content: formData.content,
-      media: [
-        {
-          id: Date.now().toString(),
-          type: 'image' as const,
-          url: 'https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500'
-        }
-      ],
-      format: formData.format,
-      channels: formData.channels,
-      scheduledDate: formData.scheduledDate || new Date().toISOString(),
-      status: 'pending_approval',
-      approvalLink: `${window.location.origin}/approve/${Date.now()}`
-    });
+    // Criar posts para cada cliente selecionado
+    const createdPosts = formData.clientIds.map(clientId => {
+      const selectedClient = selectedClients.find(c => c.id === clientId);
+      if (!selectedClient) return null;
 
-    setApprovalLink(newPost.approvalLink!);
+      return addPost({
+        clientId,
+        clientName: selectedClient.name,
+        content: formData.content,
+        media: mediaFiles.length > 0 ? mediaFiles : [
+          {
+            id: Date.now().toString(),
+            type: 'image' as const,
+            url: 'https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500'
+          }
+        ],
+        format: formData.format,
+        channels: formData.channels,
+        scheduledDate: formData.scheduledDate || new Date().toISOString(),
+        status: 'pending_approval',
+        approvalLink: `${window.location.origin}/approve/${Date.now()}`
+      });
+    }).filter(Boolean);
+
+    if (createdPosts.length > 0) {
+      setApprovalLink(createdPosts[0]!.approvalLink!);
+    }
+    
     setShowConfirmation(false);
     resetForm();
   };
 
   const publishNow = () => {
-    const selectedClient = selectedClients.find(c => c.id === formData.clientId);
-    if (!selectedClient) return;
+    if (formData.clientIds.length === 0) return;
 
-    const newPost = addPost({
-      clientId: formData.clientId,
-      clientName: selectedClient.name,
-      content: formData.content,
-      media: [
-        {
-          id: Date.now().toString(),
-          type: 'image' as const,
-          url: 'https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500'
-        }
-      ],
-      format: formData.format,
-      channels: formData.channels,
-      scheduledDate: new Date().toISOString(),
-      status: 'approved'
+    // Publicar para cada cliente selecionado
+    const publishPromises = formData.clientIds.map(async (clientId) => {
+      const selectedClient = selectedClients.find(c => c.id === clientId);
+      if (!selectedClient) return;
+
+      const newPost = addPost({
+        clientId,
+        clientName: selectedClient.name,
+        content: formData.content,
+        media: mediaFiles.length > 0 ? mediaFiles : [
+          {
+            id: Date.now().toString(),
+            type: 'image' as const,
+            url: 'https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500'
+          }
+        ],
+        format: formData.format,
+        channels: formData.channels,
+        scheduledDate: new Date().toISOString(),
+        status: 'approved'
+      });
+
+      return publishPost(newPost);
     });
 
-    // Publicar imediatamente
-    publishPost(newPost)
+    Promise.all(publishPromises)
       .then(() => {
-        alert('Post publicado com sucesso!');
+        alert('Posts publicados com sucesso!');
         setShowConfirmation(false);
         onClose();
         resetForm();
@@ -100,13 +170,14 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
 
   const resetForm = () => {
     setFormData({
-      clientId: '',
+      clientIds: [],
       content: '',
       format: 'single',
       channels: [],
       scheduledDate: '',
       publishNow: false
     });
+    setMediaFiles([]);
   };
 
   const toggleChannel = (channel: Channel) => {
@@ -115,6 +186,15 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
       channels: prev.channels.includes(channel)
         ? prev.channels.filter(c => c !== channel)
         : [...prev.channels, channel]
+    }));
+  };
+
+  const toggleClient = (clientId: string) => {
+    setFormData(prev => ({
+      ...prev,
+      clientIds: prev.clientIds.includes(clientId)
+        ? prev.clientIds.filter(id => id !== clientId)
+        : [...prev.clientIds, clientId]
     }));
   };
 
@@ -204,32 +284,79 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
         <form onSubmit={handleSubmit} className="p-6 space-y-6">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              Cliente
+              Clientes (pode selecionar múltiplos)
             </label>
-            <select
-              value={formData.clientId}
-              onChange={(e) => setFormData(prev => ({ ...prev, clientId: e.target.value }))}
-              required
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
-            >
-              <option value="">Selecione um cliente</option>
+            <div className="space-y-2 max-h-32 overflow-y-auto border border-gray-300 rounded-md p-3">
               {selectedClients.map(client => (
-                <option key={client.id} value={client.id}>{client.name}</option>
+                <label key={client.id} className="flex items-center space-x-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={formData.clientIds.includes(client.id)}
+                    onChange={() => toggleClient(client.id)}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  {client.avatar && (
+                    <img
+                      src={client.avatar}
+                      alt={client.displayName || client.name}
+                      className="w-6 h-6 rounded-full"
+                    />
+                  )}
+                  <span className="text-sm">{client.displayName || client.name}</span>
+                </label>
               ))}
-            </select>
+            </div>
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Mídia
             </label>
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors cursor-pointer">
+            <div
+              className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer ${
+                dragActive ? 'border-blue-400 bg-blue-50' : 'border-gray-300 hover:border-gray-400'
+              }`}
+              onDragEnter={handleDrag}
+              onDragLeave={handleDrag}
+              onDragOver={handleDrag}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+            >
               <Upload className="mx-auto h-12 w-12 text-gray-400" />
               <p className="mt-2 text-sm text-gray-600">
                 Clique para fazer upload ou arraste arquivos aqui
               </p>
               <p className="text-xs text-gray-500">PNG, JPG, MP4 até 10MB</p>
             </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/*,video/*"
+              onChange={handleFileInput}
+              className="hidden"
+            />
+            
+            {mediaFiles.length > 0 && (
+              <div className="mt-4 grid grid-cols-3 gap-4">
+                {mediaFiles.map(media => (
+                  <div key={media.id} className="relative">
+                    <img
+                      src={media.url}
+                      alt="Preview"
+                      className="w-full h-24 object-cover rounded-lg"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeMedia(media.id)}
+                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div>
@@ -289,9 +416,6 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
                   <span className="text-sm">Instagram</span>
                 </label>
               </div>
-              <p className="text-xs text-gray-500 mt-1">
-                Selecione onde deseja publicar este conteúdo
-              </p>
             </div>
           </div>
 
@@ -334,7 +458,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
             </button>
             <button
               type="submit"
-              disabled={!formData.clientId || !formData.content || formData.channels.length === 0}
+              disabled={formData.clientIds.length === 0 || !formData.content || formData.channels.length === 0}
               className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {formData.publishNow ? 'Publicar Agora' : 'Criar e Enviar para Aprovação'}

@@ -1,13 +1,23 @@
 import React, { useState } from 'react';
-import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, List } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, List, Filter, Facebook, Instagram, X } from 'lucide-react';
 import { usePosts } from '../../hooks/usePosts';
+import { useAuth } from '../../contexts/AuthContext';
+import { GroupedPost } from '../../types';
 
 type ViewMode = 'month' | 'week';
 
 export const CalendarView: React.FC = () => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<ViewMode>('month');
-  const { posts } = usePosts();
+  const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
+  const [selectedPost, setSelectedPost] = useState<GroupedPost | null>(null);
+  
+  const { groupedPosts } = usePosts();
+  const { 
+    selectedClients, 
+    selectedClientFilter, 
+    setSelectedClientFilter 
+  } = useAuth();
 
   const navigateDate = (direction: 'prev' | 'next') => {
     const newDate = new Date(currentDate);
@@ -20,11 +30,67 @@ export const CalendarView: React.FC = () => {
   };
 
   const getPostsForDate = (date: Date) => {
-    return posts.filter(post => {
+    return groupedPosts.filter(post => {
       const postDate = new Date(post.scheduledDate);
       return postDate.toDateString() === date.toDateString();
     });
   };
+
+  const toggleDateExpansion = (dateString: string) => {
+    const newExpanded = new Set(expandedDates);
+    if (newExpanded.has(dateString)) {
+      newExpanded.delete(dateString);
+    } else {
+      newExpanded.add(dateString);
+    }
+    setExpandedDates(newExpanded);
+  };
+
+  const renderPostCard = (post: GroupedPost, isExpanded: boolean = false) => (
+    <div
+      key={post.id}
+      onClick={() => setSelectedPost(post)}
+      className={`text-xs px-2 py-2 rounded bg-blue-100 text-blue-800 cursor-pointer hover:bg-blue-200 transition-colors ${
+        isExpanded ? 'mb-2' : 'mb-1'
+      }`}
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center space-x-1">
+          {post.avatar && (
+            <img
+              src={post.avatar}
+              alt={post.displayName || post.clientName}
+              className="w-4 h-4 rounded-full"
+            />
+          )}
+          <span className="font-medium truncate">
+            {post.displayName || post.clientName}
+          </span>
+        </div>
+        <div className="flex space-x-1">
+          <Facebook 
+            size={12} 
+            className={post.publishedChannels.includes('facebook') ? 'text-blue-600' : 'text-gray-300'} 
+          />
+          <Instagram 
+            size={12} 
+            className={post.publishedChannels.includes('instagram') ? 'text-pink-600' : 'text-gray-300'} 
+          />
+        </div>
+      </div>
+      {isExpanded && (
+        <div className="mt-1">
+          <p className="text-xs text-gray-600 line-clamp-2">{post.content}</p>
+          <div className="mt-1 text-xs text-gray-500">
+            {new Date(post.scheduledDate).toLocaleTimeString('pt-BR', { 
+              hour: '2-digit', 
+              minute: '2-digit' 
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
 
   const renderMonthView = () => {
     const startOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1);
@@ -39,26 +105,48 @@ export const CalendarView: React.FC = () => {
       const dayPosts = getPostsForDate(currentDay);
       const isCurrentMonth = currentDay.getMonth() === currentDate.getMonth();
       const isToday = currentDay.toDateString() === new Date().toDateString();
+      const dateString = currentDay.toDateString();
+      const isExpanded = expandedDates.has(dateString);
 
       days.push(
         <div
           key={currentDay.toISOString()}
           className={`min-h-24 p-2 border border-gray-200 ${
             !isCurrentMonth ? 'bg-gray-50 text-gray-400' : 'bg-white'
-          } ${isToday ? 'bg-blue-50 border-blue-200' : ''}`}
+          } ${isToday ? 'bg-blue-50 border-blue-200' : ''} ${
+            isExpanded ? 'row-span-2' : ''
+          }`}
         >
           <div className="font-medium text-sm mb-1">{currentDay.getDate()}</div>
           <div className="space-y-1">
-            {dayPosts.slice(0, 2).map(post => (
-              <div
-                key={post.id}
-                className="text-xs px-2 py-1 rounded bg-blue-100 text-blue-800 truncate"
+            {isExpanded ? (
+              dayPosts.map(post => renderPostCard(post, true))
+            ) : (
+              <>
+                {dayPosts.slice(0, 2).map(post => renderPostCard(post))}
+                {dayPosts.length > 2 && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleDateExpansion(dateString);
+                    }}
+                    className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                  >
+                    +{dayPosts.length - 2} mais
+                  </button>
+                )}
+              </>
+            )}
+            {isExpanded && dayPosts.length > 0 && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  toggleDateExpansion(dateString);
+                }}
+                className="text-xs text-gray-500 hover:text-gray-700"
               >
-                {post.clientName}
-              </div>
-            ))}
-            {dayPosts.length > 2 && (
-              <div className="text-xs text-gray-500">+{dayPosts.length - 2} mais</div>
+                Recolher
+              </button>
             )}
           </div>
         </div>
@@ -89,6 +177,8 @@ export const CalendarView: React.FC = () => {
       day.setDate(day.getDate() + i);
       const dayPosts = getPostsForDate(day);
       const isToday = day.toDateString() === new Date().toDateString();
+      const dateString = day.toDateString();
+      const isExpanded = expandedDates.has(dateString);
 
       days.push(
         <div key={day.toISOString()} className="flex-1 min-h-96 border border-gray-200 p-3">
@@ -96,15 +186,29 @@ export const CalendarView: React.FC = () => {
             {day.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric' })}
           </div>
           <div className="space-y-2">
-            {dayPosts.map(post => (
-              <div
-                key={post.id}
-                className="text-xs px-2 py-2 rounded bg-blue-100 text-blue-800"
+            {isExpanded ? (
+              dayPosts.map(post => renderPostCard(post, true))
+            ) : (
+              <>
+                {dayPosts.slice(0, 3).map(post => renderPostCard(post))}
+                {dayPosts.length > 3 && (
+                  <button
+                    onClick={() => toggleDateExpansion(dateString)}
+                    className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                  >
+                    +{dayPosts.length - 3} mais
+                  </button>
+                )}
+              </>
+            )}
+            {isExpanded && dayPosts.length > 0 && (
+              <button
+                onClick={() => toggleDateExpansion(dateString)}
+                className="text-xs text-gray-500 hover:text-gray-700"
               >
-                <div className="font-medium">{post.clientName}</div>
-                <div className="truncate">{post.content.substring(0, 30)}...</div>
-              </div>
-            ))}
+                Recolher
+              </button>
+            )}
           </div>
         </div>
       );
@@ -145,6 +249,23 @@ export const CalendarView: React.FC = () => {
         </div>
 
         <div className="flex items-center space-x-4">
+          {/* Filtro de cliente */}
+          <div className="relative">
+            <select
+              value={selectedClientFilter || ''}
+              onChange={(e) => setSelectedClientFilter(e.target.value || null)}
+              className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-8 text-sm focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">Todos os clientes</option>
+              {selectedClients.map(client => (
+                <option key={client.id} value={client.id}>
+                  {client.displayName || client.name}
+                </option>
+              ))}
+            </select>
+            <Filter className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+          </div>
+
           <div className="text-lg font-medium text-gray-900">
             {currentDate.toLocaleDateString('pt-BR', { 
               month: 'long', 
@@ -176,6 +297,77 @@ export const CalendarView: React.FC = () => {
       </div>
 
       {viewMode === 'month' ? renderMonthView() : renderWeekView()}
+
+      {/* Modal de detalhes do post */}
+      {selectedPost && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <div className="flex items-center space-x-3">
+                {selectedPost.avatar && (
+                  <img
+                    src={selectedPost.avatar}
+                    alt={selectedPost.displayName || selectedPost.clientName}
+                    className="w-8 h-8 rounded-full"
+                  />
+                )}
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900">
+                    {selectedPost.displayName || selectedPost.clientName}
+                  </h2>
+                  <div className="flex items-center space-x-2 mt-1">
+                    <Facebook 
+                      size={16} 
+                      className={selectedPost.publishedChannels.includes('facebook') ? 'text-blue-600' : 'text-gray-300'} 
+                    />
+                    <Instagram 
+                      size={16} 
+                      className={selectedPost.publishedChannels.includes('instagram') ? 'text-pink-600' : 'text-gray-300'} 
+                    />
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedPost(null)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Mídia</h3>
+                <img
+                  src={selectedPost.media[0]?.url}
+                  alt="Post media"
+                  className="w-full h-64 object-cover rounded-lg"
+                />
+              </div>
+
+              <div>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Legenda</h3>
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap">{selectedPost.content}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="font-medium text-gray-600">Data de Publicação:</span>
+                  <p className="text-gray-900">
+                    {new Date(selectedPost.scheduledDate).toLocaleString('pt-BR')}
+                  </p>
+                </div>
+                <div>
+                  <span className="font-medium text-gray-600">Status:</span>
+                  <p className="text-gray-900">{selectedPost.status}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
