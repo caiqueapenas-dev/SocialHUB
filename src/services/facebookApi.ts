@@ -1,10 +1,9 @@
 import { FacebookAuth, FacebookPage, Post, Client } from "../types";
 
-const APP_ID = "1269437438073080";
-const APP_SECRET = "ebf75895a6f11f36d04ee4550388d81c";
-const API_VERSION = "v23.0";
-const ACCESS_TOKEN =
-  "EAASCiZBZBPmPgBPlIFycrcQfrWIJm8RWB8O8Xup7P3TtGsTYrbanRvsBFyL5aUsCdTuv2VWJU4cDN93QCfnmuTZBZBOXkdXLICOekrLeeGPguekpXteOxoVU0QfUmPne4PgOxQZAVywG65ZBXC0709IRhtRlaeE0heSH9KBKNC3ZAZCZASp1B0PHGtju8Of8WhAkFNuZA2iOywBBiH0qomZBZA20R06aO6QcJQUJmqu0CbbUTntIF6FjHgZDZD";
+const APP_ID = import.meta.env.VITE_FACEBOOK_APP_ID;
+const APP_SECRET = import.meta.env.VITE_FACEBOOK_APP_SECRET;
+const API_VERSION = import.meta.env.VITE_FACEBOOK_API_VERSION;
+const ACCESS_TOKEN = import.meta.env.VITE_FACEBOOK_ACCESS_TOKEN;
 
 export class FacebookApiService {
   private static instance: FacebookApiService;
@@ -287,7 +286,10 @@ export class FacebookApiService {
           status: fbPost.is_published ? "published" : "scheduled",
           createdAt: fbPost.created_time,
           facebookPostId: fbPost.id,
-          combinedId: this.generateCombinedId(fbPost.message, fbPost.created_time)
+          combinedId: this.generateCombinedId(
+            fbPost.message,
+            fbPost.created_time
+          ),
         };
         posts.push(post);
       }
@@ -313,7 +315,10 @@ export class FacebookApiService {
             status: "published",
             createdAt: igPost.timestamp,
             instagramPostId: igPost.id,
-            combinedId: this.generateCombinedId(igPost.caption, igPost.timestamp)
+            combinedId: this.generateCombinedId(
+              igPost.caption,
+              igPost.timestamp
+            ),
           };
           posts.push(post);
         }
@@ -332,7 +337,9 @@ export class FacebookApiService {
 
   private generateCombinedId(content: string, timestamp: string): string {
     // Gerar ID combinado baseado no conteúdo e timestamp para agrupar posts similares
-    const contentHash = content ? content.substring(0, 50).replace(/\s+/g, '') : '';
+    const contentHash = content
+      ? content.substring(0, 50).replace(/\s+/g, "")
+      : "";
     const dateHash = new Date(timestamp).toDateString();
     return `${contentHash}_${dateHash}`;
   }
@@ -340,11 +347,13 @@ export class FacebookApiService {
   private extractMediaFromFacebookPost(fbPost: any): any[] {
     if (!fbPost.attachments?.data?.[0]) {
       // Se não há mídia, usar uma imagem padrão
-      return [{
-        id: fbPost.id,
-        type: "image",
-        url: "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500"
-      }];
+      return [
+        {
+          id: fbPost.id,
+          type: "image",
+          url: "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500",
+        },
+      ];
     }
 
     const attachment = fbPost.attachments.data[0];
@@ -354,14 +363,18 @@ export class FacebookApiService {
       media.push({
         id: attachment.target?.id || fbPost.id,
         type: "image",
-        url: attachment.media?.image?.src || "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500",
+        url:
+          attachment.media?.image?.src ||
+          "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500",
       });
     } else if (attachment.type === "video_inline") {
       media.push({
         id: attachment.target?.id || fbPost.id,
         type: "video",
         url: attachment.media?.source || "",
-        thumbnail: attachment.media?.image?.src || "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500",
+        thumbnail:
+          attachment.media?.image?.src ||
+          "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500",
       });
     } else if (attachment.subattachments?.data) {
       // Carrossel
@@ -369,17 +382,26 @@ export class FacebookApiService {
         media.push({
           id: sub.target?.id || `${fbPost.id}_${media.length}`,
           type: sub.type === "photo" ? "image" : "video",
-          url: sub.media?.image?.src || sub.media?.source || "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500",
-          thumbnail: sub.media?.image?.src || "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500",
+          url:
+            sub.media?.image?.src ||
+            sub.media?.source ||
+            "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500",
+          thumbnail:
+            sub.media?.image?.src ||
+            "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500",
         });
       }
     }
 
-    return media.length > 0 ? media : [{
-      id: fbPost.id,
-      type: "image",
-      url: "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500"
-    }];
+    return media.length > 0
+      ? media
+      : [
+          {
+            id: fbPost.id,
+            type: "image",
+            url: "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500",
+          },
+        ];
   }
 
   private extractMediaFromInstagramPost(igPost: any): any[] {
@@ -387,8 +409,13 @@ export class FacebookApiService {
       {
         id: igPost.id,
         type: igPost.media_type === "VIDEO" ? "video" : "image",
-        url: igPost.media_url || "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500",
-        thumbnail: igPost.thumbnail_url || igPost.media_url || "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500",
+        url:
+          igPost.media_url ||
+          "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500",
+        thumbnail:
+          igPost.thumbnail_url ||
+          igPost.media_url ||
+          "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500",
       },
     ];
   }
