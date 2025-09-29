@@ -35,6 +35,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
     publishNow: false,
   });
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
+  const [mediaUrl, setMediaUrl] = useState("");
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [approvalLink, setApprovalLink] = useState("");
   const [dragActive, setDragActive] = useState(false);
@@ -87,8 +88,21 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
       url: URL.createObjectURL(file),
       file,
     }));
-
+    setMediaUrl("");
     setMediaFiles((prev) => [...prev, ...newMediaFiles]);
+  };
+
+  const addMediaFromUrl = () => {
+    if (mediaUrl.trim() === "") return;
+
+    const newMediaFile: MediaFile = {
+      id: Date.now().toString() + Math.random(),
+      type: "image", // Assumindo imagem por padrão
+      url: mediaUrl,
+    };
+
+    setMediaFiles((prev) => [...prev, newMediaFile]);
+    setMediaUrl("");
   };
 
   const removeMedia = (mediaId: string) => {
@@ -346,6 +360,23 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               Mídia
             </label>
+            <div className="flex items-center space-x-2 mb-4">
+              <input
+                type="text"
+                placeholder="Ou cole a URL da imagem aqui"
+                value={mediaUrl}
+                onChange={(e) => setMediaUrl(e.target.value)}
+                className="flex-1 px-3 py-2 border border-gray-300 rounded-md text-sm"
+              />
+              <button
+                type="button"
+                onClick={addMediaFromUrl}
+                className="px-4 py-2 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
+              >
+                Adicionar
+              </button>
+            </div>
+
             <div
               className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer ${
                 dragActive

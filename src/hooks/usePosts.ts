@@ -4,8 +4,16 @@ import { useAuth } from "../contexts/AuthContext";
 import { FacebookApiService } from "../services/facebookApi";
 
 export const usePosts = () => {
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [posts, setPosts] = useState<Post[]>(() => {
+    try {
+      const localData = localStorage.getItem("socialHubPosts");
+      return localData ? JSON.parse(localData) : [];
+    } catch (error) {
+      console.error("Erro ao carregar posts do localStorage:", error);
+      return [];
+    }
+  });
+  const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -148,9 +156,13 @@ export const usePosts = () => {
   };
 
   const updatePostContent = (postId: string, content: string) => {
-    setPosts((prev) =>
-      prev.map((post) => (post.id === postId ? { ...post, content } : post))
-    );
+    setPosts((prevPosts) => {
+      const newPosts = prevPosts.map((post) =>
+        post.id === postId ? { ...post, content } : post
+      );
+      localStorage.setItem("socialHubPosts", JSON.stringify(newPosts));
+      return newPosts;
+    });
   };
 
   const addPost = (post: Omit<Post, "id" | "createdAt">) => {
@@ -159,7 +171,11 @@ export const usePosts = () => {
       id: Date.now().toString(),
       createdAt: new Date().toISOString(),
     };
-    setPosts((prev) => [...prev, newPost]);
+    setPosts((prevPosts) => {
+      const newPosts = [...prevPosts, newPost];
+      localStorage.setItem("socialHubPosts", JSON.stringify(newPosts));
+      return newPosts;
+    });
     return newPost;
   };
 

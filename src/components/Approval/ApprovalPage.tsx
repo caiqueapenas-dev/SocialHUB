@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { useParams } from "react-router-dom";
+import React, { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import {
   Check,
   X,
@@ -24,8 +24,19 @@ export const ApprovalPage: React.FC = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedContent, setEditedContent] = useState("");
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const navigate = useNavigate();
 
   const post = postId ? getPostById(postId) : null;
+
+  useEffect(() => {
+    if (post?.status === "approved") {
+      const timer = setTimeout(() => {
+        localStorage.setItem("redirectToView", "calendar");
+        navigate("/");
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [post, navigate]);
 
   if (!post) {
     return (
