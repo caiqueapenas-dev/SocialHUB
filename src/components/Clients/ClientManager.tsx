@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Users, Check, X, Edit2, Save } from 'lucide-react';
+import { Users, Check, X, CreditCard as Edit2, Save } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 
 export const ClientManager: React.FC = () => {
