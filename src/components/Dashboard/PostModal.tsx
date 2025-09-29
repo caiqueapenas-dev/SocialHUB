@@ -1,6 +1,13 @@
-import React, { useState } from 'react';
-import { X, Facebook, Instagram, Calendar, CreditCard as Edit2, Copy } from 'lucide-react';
-import { GroupedPost } from '../../types';
+import React, { useState } from "react";
+import {
+  X,
+  Facebook,
+  Instagram,
+  Calendar,
+  CreditCard as Edit2,
+  Copy,
+} from "lucide-react";
+import { GroupedPost } from "../../types";
 
 interface PostModalProps {
   post: GroupedPost | null;
@@ -8,19 +15,19 @@ interface PostModalProps {
 }
 
 const formatLabels: Record<string, string> = {
-  single: 'Foto única',
-  carousel: 'Carrossel',
-  story: 'Story',
-  reels: 'Reels'
+  single: "Foto única",
+  carousel: "Carrossel",
+  story: "Story",
+  reels: "Reels",
 };
 
 const statusLabels: Record<string, string> = {
-  draft: 'Rascunho',
-  scheduled: 'Agendado',
-  pending_approval: 'Aguardando Aprovação',
-  approved: 'Aprovado',
-  rejected: 'Rejeitado',
-  published: 'Publicado'
+  draft: "Rascunho",
+  scheduled: "Agendado",
+  pending_approval: "Aguardando Aprovação",
+  approved: "Aprovado",
+  rejected: "Rejeitado",
+  published: "Publicado",
 };
 
 export const PostModal: React.FC<PostModalProps> = ({ post, onClose }) => {
@@ -29,13 +36,13 @@ export const PostModal: React.FC<PostModalProps> = ({ post, onClose }) => {
   if (!post) return null;
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString('pt-BR');
+    return new Date(dateString).toLocaleString("pt-BR");
   };
 
   const copyApprovalLink = () => {
     if (post.approvalLink) {
       navigator.clipboard.writeText(post.approvalLink);
-      alert('Link de aprovação copiado!');
+      alert("Link de aprovação copiado!");
     }
   };
 
@@ -55,9 +62,9 @@ export const PostModal: React.FC<PostModalProps> = ({ post, onClose }) => {
               <h2 className="text-xl font-semibold text-gray-900">
                 {post.displayName || post.clientName}
               </h2>
-              <span 
+              <span
                 className="inline-block px-2 py-1 rounded-full text-xs font-medium text-white"
-                style={{ backgroundColor: post.color || '#6B7280' }}
+                style={{ backgroundColor: post.color || "#6B7280" }}
               >
                 {post.displayName || post.clientName}
               </span>
@@ -80,7 +87,7 @@ export const PostModal: React.FC<PostModalProps> = ({ post, onClose }) => {
                   <img
                     src={post.media[currentImageIndex]?.url}
                     alt="Post media"
-                    className="w-full h-64 object-cover rounded-lg"
+                    className="w-full h-64 object-contain bg-gray-100 rounded-lg"
                   />
                   {post.media.length > 1 && (
                     <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex space-x-2">
@@ -89,7 +96,9 @@ export const PostModal: React.FC<PostModalProps> = ({ post, onClose }) => {
                           key={index}
                           onClick={() => setCurrentImageIndex(index)}
                           className={`w-2 h-2 rounded-full ${
-                            index === currentImageIndex ? 'bg-white' : 'bg-white bg-opacity-50'
+                            index === currentImageIndex
+                              ? "bg-white"
+                              : "bg-white bg-opacity-50"
                           }`}
                         />
                       ))}
@@ -103,13 +112,15 @@ export const PostModal: React.FC<PostModalProps> = ({ post, onClose }) => {
                         key={media.id}
                         onClick={() => setCurrentImageIndex(index)}
                         className={`flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden border-2 ${
-                          index === currentImageIndex ? 'border-blue-500' : 'border-gray-200'
+                          index === currentImageIndex
+                            ? "border-blue-500"
+                            : "border-gray-200"
                         }`}
                       >
                         <img
                           src={media.url}
                           alt={`Media ${index + 1}`}
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-contain"
                         />
                       </button>
                     ))}
@@ -120,35 +131,61 @@ export const PostModal: React.FC<PostModalProps> = ({ post, onClose }) => {
 
             <div className="space-y-6">
               <div>
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Informações</h3>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  Informações
+                </h3>
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-600">Cliente:</span>
-                    <span className="text-sm text-gray-900">{post.displayName || post.clientName}</span>
+                    <span className="text-sm font-medium text-gray-600">
+                      Cliente:
+                    </span>
+                    <span className="text-sm text-gray-900">
+                      {post.displayName || post.clientName}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-600">Status:</span>
-                    <span className="text-sm text-gray-900">{statusLabels[post.status]}</span>
+                    <span className="text-sm font-medium text-gray-600">
+                      Status:
+                    </span>
+                    <span className="text-sm text-gray-900">
+                      {statusLabels[post.status]}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-600">Formato:</span>
-                    <span className="text-sm text-gray-900">{formatLabels[post.format]}</span>
+                    <span className="text-sm font-medium text-gray-600">
+                      Formato:
+                    </span>
+                    <span className="text-sm text-gray-900">
+                      {formatLabels[post.format]}
+                    </span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-600">Canais:</span>
+                    <span className="text-sm font-medium text-gray-600">
+                      Canais:
+                    </span>
                     <div className="flex space-x-2">
-                      <Facebook 
-                        size={16} 
-                        className={post.publishedChannels.includes('facebook') ? 'text-blue-600' : 'text-gray-300'} 
+                      <Facebook
+                        size={16}
+                        className={
+                          post.publishedChannels.includes("facebook")
+                            ? "text-blue-600"
+                            : "text-gray-300"
+                        }
                       />
-                      <Instagram 
-                        size={16} 
-                        className={post.publishedChannels.includes('instagram') ? 'text-pink-600' : 'text-gray-300'} 
+                      <Instagram
+                        size={16}
+                        className={
+                          post.publishedChannels.includes("instagram")
+                            ? "text-pink-600"
+                            : "text-gray-300"
+                        }
                       />
                     </div>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-gray-600">Agendado para:</span>
+                    <span className="text-sm font-medium text-gray-600">
+                      Agendado para:
+                    </span>
                     <span className="text-sm text-gray-900 flex items-center space-x-1">
                       <Calendar size={14} />
                       <span>{formatDate(post.scheduledDate)}</span>
@@ -159,7 +196,9 @@ export const PostModal: React.FC<PostModalProps> = ({ post, onClose }) => {
 
               {post.approvalLink && (
                 <div>
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">Link de Aprovação</h3>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">
+                    Link de Aprovação
+                  </h3>
                   <div className="flex items-center space-x-2">
                     <input
                       type="text"
@@ -183,7 +222,9 @@ export const PostModal: React.FC<PostModalProps> = ({ post, onClose }) => {
           <div>
             <h3 className="text-lg font-medium text-gray-900 mb-2">Legenda</h3>
             <div className="p-4 bg-gray-50 rounded-lg">
-              <p className="text-sm text-gray-700 whitespace-pre-wrap">{post.content}</p>
+              <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                {post.content}
+              </p>
             </div>
           </div>
         </div>

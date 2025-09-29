@@ -1,41 +1,54 @@
-import React, { useState, useRef } from 'react';
-import { X, Upload, Facebook, Instagram, Calendar, Link, Image as ImageIcon } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
-import { usePosts } from '../../hooks/usePosts';
-import { Channel, PostFormat, MediaFile } from '../../types';
-import { FacebookApiService } from '../../services/facebookApi';
+import React, { useState, useRef } from "react";
+import {
+  X,
+  Upload,
+  Facebook,
+  Instagram,
+  Calendar,
+  Link,
+  Image as ImageIcon,
+} from "lucide-react";
+import { useAuth } from "../../contexts/AuthContext";
+import { usePosts } from "../../hooks/usePosts";
+import { Channel, PostFormat, MediaFile } from "../../types";
+import { FacebookApiService } from "../../services/facebookApi";
 
 interface CreatePostModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClose }) => {
+export const CreatePostModal: React.FC<CreatePostModalProps> = ({
+  isOpen,
+  onClose,
+}) => {
   const { selectedClients } = useAuth();
   const { addPost, publishPost } = usePosts();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   const [formData, setFormData] = useState({
     clientIds: [] as string[],
-    content: '',
-    format: 'single' as PostFormat,
+    content: "",
+    format: "single" as PostFormat,
     channels: [] as Channel[],
-    scheduledDate: '',
-    publishNow: false
+    scheduledDate: "",
+    publishNow: false,
   });
   const [mediaFiles, setMediaFiles] = useState<MediaFile[]>([]);
   const [showConfirmation, setShowConfirmation] = useState(false);
-  const [approvalLink, setApprovalLink] = useState('');
+  const [approvalLink, setApprovalLink] = useState("");
   const [dragActive, setDragActive] = useState(false);
 
   // Definir data padrão como agora
   React.useEffect(() => {
     if (isOpen) {
       const now = new Date();
-      const localDateTime = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+      const localDateTime = new Date(
+        now.getTime() - now.getTimezoneOffset() * 60000
+      )
         .toISOString()
         .slice(0, 16);
-      setFormData(prev => ({ ...prev, scheduledDate: localDateTime }));
+      setFormData((prev) => ({ ...prev, scheduledDate: localDateTime }));
     }
   }, [isOpen]);
 
@@ -55,7 +68,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
     e.preventDefault();
     e.stopPropagation();
     setDragActive(false);
-    
+
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       handleFiles(Array.from(e.dataTransfer.files));
     }
@@ -68,18 +81,18 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
   };
 
   const handleFiles = (files: File[]) => {
-    const newMediaFiles: MediaFile[] = files.map(file => ({
+    const newMediaFiles: MediaFile[] = files.map((file) => ({
       id: Date.now().toString() + Math.random(),
-      type: file.type.startsWith('video/') ? 'video' : 'image',
+      type: file.type.startsWith("video/") ? "video" : "image",
       url: URL.createObjectURL(file),
-      file
+      file,
     }));
-    
-    setMediaFiles(prev => [...prev, ...newMediaFiles]);
+
+    setMediaFiles((prev) => [...prev, ...newMediaFiles]);
   };
 
   const removeMedia = (mediaId: string) => {
-    setMediaFiles(prev => prev.filter(m => m.id !== mediaId));
+    setMediaFiles((prev) => prev.filter((m) => m.id !== mediaId));
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -95,33 +108,38 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
     if (formData.clientIds.length === 0) return;
 
     // Criar posts para cada cliente selecionado
-    const createdPosts = formData.clientIds.map(clientId => {
-      const selectedClient = selectedClients.find(c => c.id === clientId);
-      if (!selectedClient) return null;
+    const createdPosts = formData.clientIds
+      .map((clientId) => {
+        const selectedClient = selectedClients.find((c) => c.id === clientId);
+        if (!selectedClient) return null;
 
-      return addPost({
-        clientId,
-        clientName: selectedClient.name,
-        content: formData.content,
-        media: mediaFiles.length > 0 ? mediaFiles : [
-          {
-            id: Date.now().toString(),
-            type: 'image' as const,
-            url: 'https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500'
-          }
-        ],
-        format: formData.format,
-        channels: formData.channels,
-        scheduledDate: formData.scheduledDate || new Date().toISOString(),
-        status: 'pending_approval',
-        approvalLink: `${window.location.origin}/approve/${Date.now()}`
-      });
-    }).filter(Boolean);
+        return addPost({
+          clientId,
+          clientName: selectedClient.name,
+          content: formData.content,
+          media:
+            mediaFiles.length > 0
+              ? mediaFiles
+              : [
+                  {
+                    id: Date.now().toString(),
+                    type: "image" as const,
+                    url: "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500",
+                  },
+                ],
+          format: formData.format,
+          channels: formData.channels,
+          scheduledDate: formData.scheduledDate || new Date().toISOString(),
+          status: "pending_approval",
+          approvalLink: `${window.location.origin}/approve/${Date.now()}`,
+        });
+      })
+      .filter(Boolean);
 
     if (createdPosts.length > 0) {
       setApprovalLink(createdPosts[0]!.approvalLink!);
     }
-    
+
     setShowConfirmation(false);
     resetForm();
   };
@@ -131,24 +149,27 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
 
     // Publicar para cada cliente selecionado
     const publishPromises = formData.clientIds.map(async (clientId) => {
-      const selectedClient = selectedClients.find(c => c.id === clientId);
+      const selectedClient = selectedClients.find((c) => c.id === clientId);
       if (!selectedClient) return;
 
       const newPost = addPost({
         clientId,
         clientName: selectedClient.name,
         content: formData.content,
-        media: mediaFiles.length > 0 ? mediaFiles : [
-          {
-            id: Date.now().toString(),
-            type: 'image' as const,
-            url: 'https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500'
-          }
-        ],
+        media:
+          mediaFiles.length > 0
+            ? mediaFiles
+            : [
+                {
+                  id: Date.now().toString(),
+                  type: "image" as const,
+                  url: "https://images.pexels.com/photos/1640777/pexels-photo-1640777.jpeg?auto=compress&cs=tinysrgb&w=500",
+                },
+              ],
         format: formData.format,
         channels: formData.channels,
         scheduledDate: new Date().toISOString(),
-        status: 'approved'
+        status: "approved",
       });
 
       return publishPost(newPost);
@@ -156,13 +177,13 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
 
     Promise.all(publishPromises)
       .then(() => {
-        alert('Posts publicados com sucesso!');
+        alert("Posts publicados com sucesso!");
         setShowConfirmation(false);
         onClose();
         resetForm();
       })
       .catch((error) => {
-        console.error('Erro ao publicar:', error);
+        console.error("Erro ao publicar:", error);
         alert(`Erro ao publicar: ${error.message}`);
         setShowConfirmation(false);
       });
@@ -171,30 +192,30 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
   const resetForm = () => {
     setFormData({
       clientIds: [],
-      content: '',
-      format: 'single',
+      content: "",
+      format: "single",
       channels: [],
-      scheduledDate: '',
-      publishNow: false
+      scheduledDate: "",
+      publishNow: false,
     });
     setMediaFiles([]);
   };
 
   const toggleChannel = (channel: Channel) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       channels: prev.channels.includes(channel)
-        ? prev.channels.filter(c => c !== channel)
-        : [...prev.channels, channel]
+        ? prev.channels.filter((c) => c !== channel)
+        : [...prev.channels, channel],
     }));
   };
 
   const toggleClient = (clientId: string) => {
-    setFormData(prev => ({
+    setFormData((prev) => ({
       ...prev,
       clientIds: prev.clientIds.includes(clientId)
-        ? prev.clientIds.filter(id => id !== clientId)
-        : [...prev.clientIds, clientId]
+        ? prev.clientIds.filter((id) => id !== clientId)
+        : [...prev.clientIds, clientId],
     }));
   };
 
@@ -202,9 +223,12 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
         <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Confirmar Publicação</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-4">
+            Confirmar Publicação
+          </h3>
           <p className="text-sm text-gray-600 mb-6">
-            Tem certeza que deseja publicar este post agora? Esta ação não pode ser desfeita.
+            Tem certeza que deseja publicar este post agora? Esta ação não pode
+            ser desfeita.
           </p>
           <div className="flex space-x-4">
             <button
@@ -230,10 +254,12 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
         <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-medium text-gray-900">Post Agendado!</h3>
+            <h3 className="text-lg font-medium text-gray-900">
+              Post Agendado!
+            </h3>
             <button
               onClick={() => {
-                setApprovalLink('');
+                setApprovalLink("");
                 onClose();
               }}
               className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -243,7 +269,8 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
           </div>
           <div className="space-y-4">
             <p className="text-sm text-gray-600">
-              Post criado com sucesso! Envie este link para aprovação do cliente:
+              Post criado com sucesso! Envie este link para aprovação do
+              cliente:
             </p>
             <div className="flex items-center space-x-2">
               <input
@@ -255,7 +282,7 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
               <button
                 onClick={() => {
                   navigator.clipboard.writeText(approvalLink);
-                  alert('Link copiado!');
+                  alert("Link copiado!");
                 }}
                 className="px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
               >
@@ -272,7 +299,9 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">Criar Novo Post</h2>
+          <h2 className="text-xl font-semibold text-gray-900">
+            Criar Novo Post
+          </h2>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -287,8 +316,11 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
               Clientes (pode selecionar múltiplos)
             </label>
             <div className="space-y-2 max-h-32 overflow-y-auto border border-gray-300 rounded-md p-3">
-              {selectedClients.map(client => (
-                <label key={client.id} className="flex items-center space-x-3 cursor-pointer">
+              {selectedClients.map((client) => (
+                <label
+                  key={client.id}
+                  className="flex items-center space-x-3 cursor-pointer"
+                >
                   <input
                     type="checkbox"
                     checked={formData.clientIds.includes(client.id)}
@@ -302,7 +334,9 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
                       className="w-6 h-6 rounded-full"
                     />
                   )}
-                  <span className="text-sm">{client.displayName || client.name}</span>
+                  <span className="text-sm">
+                    {client.displayName || client.name}
+                  </span>
                 </label>
               ))}
             </div>
@@ -314,7 +348,9 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
             </label>
             <div
               className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer ${
-                dragActive ? 'border-blue-400 bg-blue-50' : 'border-gray-300 hover:border-gray-400'
+                dragActive
+                  ? "border-blue-400 bg-blue-50"
+                  : "border-gray-300 hover:border-gray-400"
               }`}
               onDragEnter={handleDrag}
               onDragLeave={handleDrag}
@@ -336,15 +372,15 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
               onChange={handleFileInput}
               className="hidden"
             />
-            
+
             {mediaFiles.length > 0 && (
               <div className="mt-4 grid grid-cols-3 gap-4">
-                {mediaFiles.map(media => (
+                {mediaFiles.map((media) => (
                   <div key={media.id} className="relative">
                     <img
                       src={media.url}
                       alt="Preview"
-                      className="w-full h-24 object-cover rounded-lg"
+                      className="w-full h-full object-contain rounded-lg"
                     />
                     <button
                       type="button"
@@ -365,7 +401,9 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
             </label>
             <textarea
               value={formData.content}
-              onChange={(e) => setFormData(prev => ({ ...prev, content: e.target.value }))}
+              onChange={(e) =>
+                setFormData((prev) => ({ ...prev, content: e.target.value }))
+              }
               required
               rows={4}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
@@ -380,7 +418,12 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
               </label>
               <select
                 value={formData.format}
-                onChange={(e) => setFormData(prev => ({ ...prev, format: e.target.value as PostFormat }))}
+                onChange={(e) =>
+                  setFormData((prev) => ({
+                    ...prev,
+                    format: e.target.value as PostFormat,
+                  }))
+                }
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="single">Foto única</option>
@@ -398,8 +441,8 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
                 <label className="flex items-center space-x-2 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={formData.channels.includes('facebook')}
-                    onChange={() => toggleChannel('facebook')}
+                    checked={formData.channels.includes("facebook")}
+                    onChange={() => toggleChannel("facebook")}
                     className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
                   <Facebook size={20} className="text-blue-600" />
@@ -408,8 +451,8 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
                 <label className="flex items-center space-x-2 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={formData.channels.includes('instagram')}
-                    onChange={() => toggleChannel('instagram')}
+                    checked={formData.channels.includes("instagram")}
+                    onChange={() => toggleChannel("instagram")}
                     className="rounded border-gray-300 text-pink-600 focus:ring-pink-500"
                   />
                   <Instagram size={20} className="text-pink-600" />
@@ -428,7 +471,12 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
                 <input
                   type="checkbox"
                   checked={formData.publishNow}
-                  onChange={(e) => setFormData(prev => ({ ...prev, publishNow: e.target.checked }))}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      publishNow: e.target.checked,
+                    }))
+                  }
                   className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 />
                 <span className="text-sm text-gray-700">Publicar agora</span>
@@ -436,11 +484,19 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
             </div>
             {!formData.publishNow && (
               <div className="relative">
-                <Calendar className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={16} />
+                <Calendar
+                  className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"
+                  size={16}
+                />
                 <input
                   type="datetime-local"
                   value={formData.scheduledDate}
-                  onChange={(e) => setFormData(prev => ({ ...prev, scheduledDate: e.target.value }))}
+                  onChange={(e) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      scheduledDate: e.target.value,
+                    }))
+                  }
                   required={!formData.publishNow}
                   className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
                 />
@@ -458,10 +514,16 @@ export const CreatePostModal: React.FC<CreatePostModalProps> = ({ isOpen, onClos
             </button>
             <button
               type="submit"
-              disabled={formData.clientIds.length === 0 || !formData.content || formData.channels.length === 0}
+              disabled={
+                formData.clientIds.length === 0 ||
+                !formData.content ||
+                formData.channels.length === 0
+              }
               className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {formData.publishNow ? 'Publicar Agora' : 'Criar e Enviar para Aprovação'}
+              {formData.publishNow
+                ? "Publicar Agora"
+                : "Criar e Enviar para Aprovação"}
             </button>
           </div>
         </form>

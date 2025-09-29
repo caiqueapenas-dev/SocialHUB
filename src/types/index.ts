@@ -17,15 +17,21 @@ export interface Post {
 
 export interface MediaFile {
   id: string;
-  type: 'image' | 'video';
+  type: "image" | "video";
   url: string;
   thumbnail?: string;
   file?: File;
 }
 
-export type PostFormat = 'single' | 'carousel' | 'story' | 'reels';
-export type Channel = 'facebook' | 'instagram';
-export type PostStatus = 'draft' | 'scheduled' | 'pending_approval' | 'approved' | 'rejected' | 'published';
+export type PostFormat = "single" | "carousel" | "story" | "reels";
+export type Channel = "facebook" | "instagram";
+export type PostStatus =
+  | "draft"
+  | "scheduled"
+  | "pending_approval"
+  | "approved"
+  | "rejected"
+  | "published";
 
 export interface Client {
   id: string;
